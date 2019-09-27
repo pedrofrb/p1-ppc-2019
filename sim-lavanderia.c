@@ -211,7 +211,7 @@ void *MaquinaLavar(void* thread_data){
         printf("Funcionario: coloquei a MUDA %d na MAQUINA %d\n",mudaAtual.idMuda,identificacao);
         sem_post(&data->filaMutex);
         sem_post(&data->funcMutex);
-        usleep(1000);
+        usleep(4000);
         printf("MAQUINA %d LIVRE\n",identificacao);
         mudaAtual.idAparelhoAnterior=identificacao;
         sem_wait(&data->roupasLavadasMutex);
@@ -278,7 +278,7 @@ void *MesaPassar(void* thread_data){
         sem_post(&data->secadoras[mudaAtual.idAparelhoAnterior]);
         printf("Funcionario: estou passando a MUDA %d na TABUA %d\n",mudaAtual.idMuda,identificacao);
         sem_post(&data->roupasSecasMutex);
-        usleep(1000);
+        usleep(2000);
         sem_post(&data->funcMutex);
         sem_wait(&data->totalMudasLavadasMutex);
         data->totalMudasLavadas++;
