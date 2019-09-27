@@ -177,7 +177,7 @@ void *GeradorClientes(void* thread_data){
     
     for(i=0;i<data->numClientes;i++){
         muda_t novaMuda;
-        novaMuda.idAparelhoAnterior=NULL;
+        novaMuda.idAparelhoAnterior=-1;
         novaMuda.idMuda=i;
         sem_wait(&data->filaMutex);
         fifo_add(data->fila,&novaMuda);
@@ -199,7 +199,6 @@ void *MaquinaLavar(void* thread_data){
             if(data->totalMudasLavadas==data->numClientes){
                 sem_post(&data->filaMutex);
                 sem_post(&data->maquinas[identificacao]);
-                // printf("\nFinalizando maquina de lavar %d\n",identificacao);
                 pthread_exit(NULL);
             }
             sem_post(&data->filaMutex);
@@ -234,7 +233,6 @@ void *Secadora(void* thread_data){
             if(data->totalMudasLavadas==data->numClientes){
                 sem_post(&data->roupasLavadasMutex);
                 sem_post(&data->secadoras[identificacao]);
-                // printf("\nFinalizando secadora %d\n",identificacao);
                 pthread_exit(NULL);
             }
             sem_post(&data->roupasLavadasMutex);
@@ -254,7 +252,6 @@ void *Secadora(void* thread_data){
         sem_wait(&data->roupasSecasMutex);
         fifo_add(data->roupasSecas,&mudaAtual);
         sem_post(&data->roupasSecasMutex);
-        // sem_post(&data->secadoras[identificacao]); //tirar dps q isso é de resp da mesa de passar
     }
 
 }
@@ -268,7 +265,6 @@ void *MesaPassar(void* thread_data){
         sem_wait(&data->roupasSecasMutex);
         if(fifo_is_empty(data->roupasSecas)){
             if(data->totalMudasLavadas==data->numClientes){
-                // printf("\nFinalizando mesa de passar %d\n",identificacao);
                 sem_post(&data->roupasSecasMutex);
                 sem_post(&data->mpassar[identificacao]);
                 pthread_exit(NULL);
@@ -282,9 +278,7 @@ void *MesaPassar(void* thread_data){
         sem_post(&data->secadoras[mudaAtual.idAparelhoAnterior]);
         printf("Funcionario: estou passando a MUDA %d na TABUA %d\n",mudaAtual.idMuda,identificacao);
         sem_post(&data->roupasSecasMutex);
-        // sem_post(&data->funcMutex);
         usleep(1000);
-        // printf("\nFuncionario acabou na mesa %d  o processo de passar a muda %d\n",identificacao,mudaAtual);
         sem_post(&data->funcMutex);
         sem_wait(&data->totalMudasLavadasMutex);
         data->totalMudasLavadas++;
