@@ -10,7 +10,7 @@
 #define NMAQUINAS 10
 #define NSECADORAS 10
 #define NMESASPASSAR 5
-#define NCLIENTESDEFAULT 5
+#define NCLIENTESDEFAULT 100
 
 typedef struct{
     int idMuda;
@@ -19,6 +19,7 @@ typedef struct{
 
 
 typedef struct{
+    int numClientes;
     sem_t maquinas[NMAQUINAS];
     sem_t secadoras[NSECADORAS];
     sem_t mpassar[NMESASPASSAR];
@@ -26,9 +27,11 @@ typedef struct{
     sem_t filaMutex;
     sem_t roupasLavadasMutex;
     sem_t roupasSecasMutex;
+    sem_t totalMudasLavadasMutex;
     fifo_t fila;
     fifo_t roupasLavadas;
     fifo_t roupasSecas;
+    int totalMudasLavadas;
 
 	
 } shared_data_t;
@@ -43,7 +46,10 @@ void *Secadora(void *);
 void *MesaPassar(void *);
 void *GeradorClientes(void *);
 
-int main(){
+int main(int argc, char *argv[]){
+   
+    
+
     thread_data_t dataMaquinas[NMAQUINAS];
     thread_data_t dataSecadoras[NSECADORAS];
     thread_data_t dataMesasPassar[NMESASPASSAR];
@@ -51,9 +57,16 @@ int main(){
     shared_data_t shared_data;
     int i;
 
-    shared_data.fila = fifo_create(NCLIENTESDEFAULT,sizeof(muda_t));
-    shared_data.roupasLavadas = fifo_create(NCLIENTESDEFAULT,sizeof(muda_t));
-    shared_data.roupasSecas = fifo_create(NCLIENTESDEFAULT,sizeof(muda_t));
+    if(argc>1){
+        shared_data.numClientes = atoi(argv[1]); 
+    }else{
+        shared_data.numClientes =NCLIENTESDEFAULT;
+    }
+
+    shared_data.fila = fifo_create(shared_data.numClientes,sizeof(muda_t));
+    shared_data.roupasLavadas = fifo_create(shared_data.numClientes,sizeof(muda_t));
+    shared_data.roupasSecas = fifo_create(shared_data.numClientes,sizeof(muda_t));
+    shared_data.totalMudasLavadas=0;
 
     //Criar os semaforos
 
@@ -76,6 +89,8 @@ int main(){
     sem_init(&shared_data.roupasLavadasMutex,0,1);
 
     sem_init(&shared_data.roupasSecasMutex,0,1);
+
+    sem_init(&shared_data.totalMudasLavadasMutex,0,1);
 
 
     //Criar as threads
@@ -136,6 +151,7 @@ int main(){
     sem_destroy(&shared_data.filaMutex);
     sem_destroy(&shared_data.roupasLavadasMutex);
     sem_destroy(&shared_data.roupasSecasMutex);
+    sem_destroy(&shared_data.totalMudasLavadasMutex);
 
 
     for (i=0; i<NSECADORAS; i++){
@@ -151,7 +167,7 @@ int main(){
     }
     
     // fifo_t fila;
-    // fila =fifo_create(NCLIENTESDEFAULT,sizeof(int));
+    // fila =fifo_create(numClientes,sizeof(int));
     // int valor=2;
     // fifo_add(fila,&valor);
     // valor=0;
@@ -166,13 +182,13 @@ void *GeradorClientes(void* thread_data){
     printf("Iniciando geracao...");
     int i;
     
-    for(i=0;i<NCLIENTESDEFAULT;i++){
+    for(i=0;i<data->numClientes;i++){
         muda_t novaMuda;
         novaMuda.idAparelhoAnterior=NULL;
         novaMuda.idMuda=i;
         sem_wait(&data->filaMutex);
         fifo_add(data->fila,&novaMuda);
-        printf("\nCliente %d chegou\n",i);
+        printf("\nCliente %d chegou... tamanho da fila=%d\n",i,fifo_size(data->fila));
         sem_post(&data->filaMutex);
         usleep(1000); //1 seg ou usleep para microsegundos
     }
@@ -187,6 +203,12 @@ void *MaquinaLavar(void* thread_data){
         sem_wait(&data->maquinas[identificacao]);
         sem_wait(&data->filaMutex);
         if(fifo_is_empty(data->fila)){
+            if(data->totalMudasLavadas==data->numClientes){
+                sem_post(&data->filaMutex);
+                sem_post(&data->maquinas[identificacao]);
+                printf("\nFinalizando maquina de lavar %d\n",identificacao);
+                pthread_exit(NULL);
+            }
             sem_post(&data->filaMutex);
             sem_post(&data->maquinas[identificacao]);
             continue;
@@ -216,6 +238,12 @@ void *Secadora(void* thread_data){
         sem_wait(&data->secadoras[identificacao]);
         sem_wait(&data->roupasLavadasMutex);
         if(fifo_is_empty(data->roupasLavadas)){
+            if(data->totalMudasLavadas==data->numClientes){
+                sem_post(&data->roupasLavadasMutex);
+                sem_post(&data->secadoras[identificacao]);
+                printf("\nFinalizando secadora %d\n",identificacao);
+                pthread_exit(NULL);
+            }
             sem_post(&data->roupasLavadasMutex);
             sem_post(&data->secadoras[identificacao]);
             continue;
@@ -246,6 +274,12 @@ void *MesaPassar(void* thread_data){
         sem_wait(&data->mpassar[identificacao]);
         sem_wait(&data->roupasSecasMutex);
         if(fifo_is_empty(data->roupasSecas)){
+            if(data->totalMudasLavadas==data->numClientes){
+                printf("\nFinalizando mesa de passar %d\n",identificacao);
+                sem_post(&data->roupasSecasMutex);
+                sem_post(&data->mpassar[identificacao]);
+                pthread_exit(NULL);
+            }
             sem_post(&data->roupasSecasMutex);
             sem_post(&data->mpassar[identificacao]);
             continue;
@@ -259,71 +293,9 @@ void *MesaPassar(void* thread_data){
         usleep(1000);
         printf("\nFuncionario acabou na mesa %d  o processo de passar a muda %d\n",identificacao,mudaAtual);
         sem_post(&data->funcMutex);
-        // mudaAtual.idAparelhoAnterior=identificacao;
-        // sem_wait(&data->roupasSecasMutex);
-        // fifo_add(data->roupasSecas,&mudaAtual);
-        // sem_post(&data->roupasSecasMutex);
+        sem_wait(&data->totalMudasLavadasMutex);
+        data->totalMudasLavadas++;
+        sem_post(&data->totalMudasLavadasMutex);
         sem_post(&data->mpassar[identificacao]);
     }
 }
-
-// void *Filosofo(void* thread_data){
-//     int filosofo=((thread_data_t*)thread_data)->filosofo;
-
-//     sem_t *garfos=((thread_data_t*)thread_data)->shared_data_p->garfos;
-//     sem_t *mutex=&((thread_data_t*)thread_data)->shared_data_p->mutex;
-
-//     printf("Eu o Filosofo %d\n",filosofo);
-
-//     int esquerda=filosofo;
-//     int direita=((filosofo+1)%NFILOSOFOS);
-
-//     //Pegar o garfo da esquerda:
-//     int n,value;
-//     for (n=0 ;n<1000 ; n++){
-
-//         // Mutex antes de entrar na RC
-//         sem_wait(mutex);
-
-//         /*
-//         Testa o valor do garfo a esquerda
-//         se for 0, liberta o mutex
-//         senao, pega o garfo a esquerda
-//         */
-//         sem_getvalue(&garfos[esquerda],&value);
-//         if (value==1){
-//             sem_wait(&garfos[esquerda]);
-//         }else{
-//             sem_post(mutex);
-//             sched_yield();
-//         }
-
-//         /*
-//         Testa o valor do garfo a direita
-//         se for 0, liberta o mutex e o garfo a esquerda
-//         senao, pega o garfo a direita
-//         */
-//         sem_getvalue(&garfos[direita],&value);
-//         if (value==1){
-//             sem_wait(&garfos[direita]);
-//         }else{
-//             sem_post(&garfos[esquerda]);
-//             sem_post(mutex);
-//             sched_yield();
-//         }
-
-//         usleep(1000);
-
-//         printf("%d: O filosofo %d estah comendo!\n",n++,filosofo);
-
-//         sem_post(&garfos[esquerda]);
-//         sem_post(&garfos[direita]);
-
-//         sem_post(mutex);
-//     }
-
-
-    //sem_wait(data->semaphore);
-	//printf("Sou a thread %d. Dormindo ... \n",data->rank);
-	//sleep(5);
-

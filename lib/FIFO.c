@@ -1,6 +1,7 @@
 /*	Generic FIFO buffer Implementation
 	Copyright (C) 2014 Jesus Ruben Santa Anna Zamudio.
-
+	Modified by Pedro Otávio Freiman Blaudt
+	
 	This program is free software: you can redistribute it and/or modify
 	it under the terms of the GNU General Public License as published by
 	the Free Software Foundation, either version 3 of the License, or
@@ -16,6 +17,7 @@
 
 	Author website: http://geekfactory.mx
 	Author e-mail: ruben at geekfactory dot mx
+	Modifier e-mail: pedro.blaudt at aluno dot cefet-rj dot br
  */
 
 #include "FIFO.h"
@@ -97,10 +99,17 @@ bool fifo_get(fifo_t fifo, void * item)
 
 bool fifo_is_full(fifo_t fifo)
 {
+	// printf("\n\n\n\n\nnumero da fila: %d\n\n\n\n",fifo->storedbytes/fifo->itemsize);
 	if (fifo->storedbytes >= fifo->allocatedbytes)
 		return true;
 	else
 		return false;
+}
+
+int fifo_size(fifo_t fifo)
+{
+	
+	return fifo->storedbytes/fifo->itemsize; 
 }
 
 bool fifo_is_empty(fifo_t fifo)
